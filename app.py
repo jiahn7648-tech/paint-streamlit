@@ -2,31 +2,27 @@ import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 import numpy as np
 import base64
-import copy
 
 # --- 1. 앱 상태 초기화 및 관리 ---
-# 캔버스에 그려진 모든 객체 (도형, 선, 텍스트 등)를 저장
 if "canvas_objects" not in st.session_state:
     st.session_state["canvas_objects"] = []
-# 현재 붓 색상
 if "stroke_color" not in st.session_state:
     st.session_state["stroke_color"] = "#EE5757"
-# 배경 이미지 데이터 (base64 인코딩된 문자열)
 if "bg_image_b64" not in st.session_state:
     st.session_state["bg_image_b64"] = None
-# 캔버스 너비/높이
 if "canvas_width" not in st.session_state:
     st.session_state["canvas_width"] = 700
 if "canvas_height" not in st.session_state:
     st.session_state["canvas_height"] = 400
 
+
 # --- 2. 앱 기본 설정 ---
 st.set_page_config(
-    page_title="나만의 커스텀 그림판",
+    page_title="최종 안정화 그림판",
     layout="wide"
 )
 
-st.title("🖌️ 나만의 커스텀 그림판 앱")
+st.title("✅ 최종 안정화된 커스텀 그림판 앱")
 st.markdown("---")
 
 # --- 3. 캔버스 설정 사이드바 ---
@@ -47,11 +43,10 @@ with st.sidebar:
     # 도구별 붓/지우개 설정 로직
     if drawing_mode == "eraser":
         stroke_width = st.slider("지우개 굵기", 1, 50, 20)
-        # 지우개 모드: 붓 색상 대신 '배경색'을 사용 (지우개 오류 해결)
+        # 지우개 모드: 배경색을 사용
         current_stroke_color = bg_color 
     else:
         stroke_width = st.slider("붓 굵기", 1, 25, 3)
-        # 붓 색상은 세션 상태의 값을 사용하여 Color Picker를 표시
         st.session_state["stroke_color"] = st.color_picker(
             "붓 색상", st.session_state["stroke_color"]
         )
@@ -71,7 +66,7 @@ with st.expander("🖼️ 배경 이미지 설정"):
     if uploaded_file is not None:
         img_bytes = uploaded_file.read()
         st.session_state["bg_image_b64"] = base64.b64encode(img_bytes).decode('utf-8')
-        st.success("배경 이미지 설정 완료. 이미지를 제거하려면 파일을 다시 업로드하거나 초기화하세요.")
+        st.success("배경 이미지 설정 완료.")
 
 # --- 5. 이모티콘 스탬프 기능 ---
 with st.expander("✨ 이모티콘 도장 (스탬프)"):
@@ -94,19 +89,17 @@ with st.expander("✨ 이모티콘 도장 (스탬프)"):
             "fill": "#000000",
             "selectable": True, 
         }
-        # 객체 목록에 도장 객체 추가
         st.session_state["canvas_objects"].append(stamp_object)
         st.success(f"'{emoji_label}' 도장이 캔버스에 추가되었습니다.")
 
 # --- 6. 캔버스 호출 및 재렌더링 처리 ---
 st.subheader("캔버스 영역")
 
-# 배경 이미지 URL 생성
 bg_image_url = None
 if st.session_state["bg_image_b64"]:
     bg_image_url = f"data:image/png;base64,{st.session_state['bg_image_b64']}"
 
-# st_canvas 컴포넌트 호출
+# 💡 핵심 수정: drawing_mode를 key에 포함시켜 모드 변경 시 캔버스를 강제 갱신
 canvas_result = st_canvas(
     stroke_width=stroke_width,            
     stroke_color=current_stroke_color,     
@@ -117,11 +110,12 @@ canvas_result = st_canvas(
     height=st.session_state["canvas_height"],                 
     width=st.session_state["canvas_width"],                   
     drawing_mode=drawing_mode,            
-    key="canvas_app_final_version", 
+    key=f"canvas_app_{drawing_mode}", # 키에 모드 포함
 )
 
-# 캔버스에 새로운 그림을 그렸을 경우, 객체 목록을 업데이트
+# 💡 핵심 수정: 캔버스 결과가 있을 때만 객체 목록 업데이트 (None 체크)
 if canvas_result.json_data is not None:
+    # 캔버스에서 그린 내용(객체)을 세션 상태에 저장하여 유지
     st.session_state["canvas_objects"] = canvas_result.json_data.get("objects", [])
 
 # --- 7. 색상 복사 (스포이드) 기능 ---
@@ -137,10 +131,9 @@ with st.expander("💧 색상 복사 (스포이드) 도구"):
             r, g, b = rgba[0], rgba[1], rgba[2]
             hex_color = f"#{r:02x}{g:02x}{b:02x}"
             
-            # 추출된 색상을 붓 색상 세션 상태에 저장
             st.session_state["stroke_color"] = hex_color
             st.success(f"색상 복사 성공! 붓 색상이 **{hex_color}**로 변경되었습니다.")
-            st.rerun() # 변경된 색상을 Color Picker에 즉시 반영하기 위해 재실행
+            st.rerun()
 
 # --- 8. 최종 결과 ---
 if canvas_result.image_data is not None:
