@@ -4,6 +4,7 @@ import numpy as np
 import base64
 
 # --- 1. 앱 상태 초기화 및 관리 ---
+# 캔버스 객체 목록을 저장할 세션 상태
 if "canvas_objects" not in st.session_state:
     st.session_state["canvas_objects"] = []
 if "stroke_color" not in st.session_state:
@@ -14,7 +15,9 @@ if "canvas_width" not in st.session_state:
     st.session_state["canvas_width"] = 700
 if "canvas_height" not in st.session_state:
     st.session_state["canvas_height"] = 400
-
+# 캔버스 배경색을 별도로 관리하여 지우개와 연동
+if "bg_color" not in st.session_state:
+    st.session_state["bg_color"] = "#FFFFFF"
 
 # --- 2. 앱 기본 설정 ---
 st.set_page_config(
@@ -31,7 +34,7 @@ with st.sidebar:
     
     # --- A. 캔버스 크기 및 배경색 설정 ---
     st.subheader("캔버스 크기 및 배경")
-    bg_color = st.color_picker("캔버스 배경 색상", "#FFFFFF") 
+    st.session_state["bg_color"] = st.color_picker("캔버스 배경 색상", st.session_state["bg_color"]) 
     
     st.session_state["canvas_width"] = st.slider("캔버스 너비", 100, 1000, st.session_state["canvas_width"])
     st.session_state["canvas_height"] = st.slider("캔버스 높이", 100, 800, st.session_state["canvas_height"])
@@ -43,8 +46,8 @@ with st.sidebar:
     # 도구별 붓/지우개 설정 로직
     if drawing_mode == "eraser":
         stroke_width = st.slider("지우개 굵기", 1, 50, 20)
-        # 지우개 모드: 배경색을 사용
-        current_stroke_color = bg_color 
+        # 지우개 모드: 붓 색상 대신 '현재 배경색'을 사용
+        current_stroke_color = st.session_state["bg_color"] 
     else:
         stroke_width = st.slider("붓 굵기", 1, 25, 3)
         st.session_state["stroke_color"] = st.color_picker(
@@ -57,6 +60,7 @@ with st.sidebar:
         st.session_state["canvas_objects"] = []
         st.session_state["bg_image_b64"] = None
         st.session_state["stroke_color"] = "#EE5757"
+        st.session_state["bg_color"] = "#FFFFFF"
         st.rerun() 
 
 # --- 4. 배경 이미지 업로드 및 적용 ---
@@ -73,8 +77,6 @@ with st.expander("✨ 이모티콘 도장 (스탬프)"):
     emojis = {"❤️": 50, "⭐": 40, "🚀": 60, "💡": 50, "🐻": 55}
     emoji_label = st.selectbox("찍을 이모티콘 선택", list(emojis.keys()))
     emoji_size = emojis[emoji_label]
-    
-    st.info("도장을 찍을 위치를 지정하고 '도장 찍기' 버튼을 누르세요. 찍은 후에는 이동 가능합니다.")
     
     stamp_x = st.slider("도장 X 좌표", 0, st.session_state["canvas_width"], st.session_state["canvas_width"] // 2)
     stamp_y = st.slider("도장 Y 좌표", 0, st.session_state["canvas_height"], st.session_state["canvas_height"] // 2)
@@ -99,21 +101,21 @@ bg_image_url = None
 if st.session_state["bg_image_b64"]:
     bg_image_url = f"data:image/png;base64,{st.session_state['bg_image_b64']}"
 
-# 💡 핵심 수정: drawing_mode를 key에 포함시켜 모드 변경 시 캔버스를 강제 갱신
+# st_canvas 컴포넌트 호출
 canvas_result = st_canvas(
     stroke_width=stroke_width,            
     stroke_color=current_stroke_color,     
-    background_color=bg_color,            
+    background_color=st.session_state["bg_color"], # 배경색을 세션 상태에서 가져옴
     background_image=bg_image_url,
     initial_drawing={"objects": st.session_state["canvas_objects"]}, 
     update_streamlit=True,                
     height=st.session_state["canvas_height"],                 
     width=st.session_state["canvas_width"],                   
     drawing_mode=drawing_mode,            
-    key=f"canvas_app_{drawing_mode}", # 키에 모드 포함
+    key=f"canvas_app_{drawing_mode}", # 도구 모드에 따라 키 변경 (안정화)
 )
 
-# 💡 핵심 수정: 캔버스 결과가 있을 때만 객체 목록 업데이트 (None 체크)
+# 💡 핵심 수정: 캔버스 결과가 None이 아닐 때만 객체 목록 업데이트
 if canvas_result.json_data is not None:
     # 캔버스에서 그린 내용(객체)을 세션 상태에 저장하여 유지
     st.session_state["canvas_objects"] = canvas_result.json_data.get("objects", [])
@@ -121,7 +123,6 @@ if canvas_result.json_data is not None:
 # --- 7. 색상 복사 (스포이드) 기능 ---
 with st.expander("💧 색상 복사 (스포이드) 도구"):
     if canvas_result.image_data is not None:
-        st.write("캔버스 중앙 픽셀의 색상을 추출하여 현재 **붓 색상**으로 복사합니다.")
         
         img_data = canvas_result.image_data
         center_y, center_x = img_data.shape[0] // 2, img_data.shape[1] // 2
